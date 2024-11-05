@@ -16,7 +16,6 @@ setup(
         'torch',
         'opencv-python',
         'numpy'
-        # No incluir cv_bridge aquí, ya que es parte de ROS
     ],
     zip_safe=True,
     maintainer='alonso',

@@ -7,7 +7,7 @@ import cv2 as cv
 import numpy as np
 import socket
 from cv_bridge import CvBridge
-import zlib  # Para la compresión de datos
+import zlib 
 
 class CamaraClient(Node):
     def __init__(self):
@@ -34,7 +34,7 @@ class CamaraClient(Node):
             return
         
         # Reducir la resolución de la imagen
-        imagen = cv.resize(imagen, (320, 240))  # Ajusta según tus necesidades
+        imagen = cv.resize(imagen, (320, 240))  # Ajustar para menor tiempo de procesamiento
 
         # Codificar la imagen como JPEG
         result, img_enc = cv.imencode('.jpg', imagen)
@@ -85,6 +85,8 @@ class CamaraClient(Node):
             return
 
         # Mostrar la imagen procesada
+        cv.namedWindow("Resultado", cv.WINDOW_NORMAL)  # Permitir redimensionamiento
+        cv.resizeWindow("Resultado", 800, 600)  # Ajustar el tamaño de la ventana
         cv.imshow("Resultado", img_decoded)
         cv.waitKey(1)  # Esperar 1 ms
 
