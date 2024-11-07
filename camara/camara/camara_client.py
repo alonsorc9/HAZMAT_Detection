@@ -3,11 +3,13 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import CompressedImage
+from sensor_msgs.msg import Image
+from std_msgs.msg import String
 import cv2 as cv
 import numpy as np
 import socket
+import zlib
 from cv_bridge import CvBridge
-import zlib 
 
 class CamaraClient(Node):
     def __init__(self):
@@ -19,6 +21,9 @@ class CamaraClient(Node):
             self.image_callback,
             10
         )
+        
+        self.hazmat_publisher = self.create_publisher(String, 'hazmat_publisher', 10)
+        self.image_publisher = self.create_publisher(Image, '/hazmat_img', 10)
         
         self.server_address = ('127.0.0.1', 10000)
 
@@ -36,13 +41,12 @@ class CamaraClient(Node):
         # Reducir la resolución de la imagen
         imagen = cv.resize(imagen, (320, 240))  # Ajustar para menor tiempo de procesamiento
 
-        # Codificar la imagen como JPEG
+        # Codificar y comprimir la imagen
         result, img_enc = cv.imencode('.jpg', imagen)
         if not result:
             self.get_logger().error("Error al codificar la imagen.")
             return
-        
-        # Comprimir la imagen codificada
+
         img_compressed = zlib.compress(img_enc)
 
         try:
@@ -53,16 +57,29 @@ class CamaraClient(Node):
                 s.sendall(len(img_compressed).to_bytes(4, byteorder='little'))
                 s.sendall(img_compressed)
 
-                # Recibir la imagen procesada del servidor
-                img_size_data = s.recv(4)
-                if not img_size_data:
-                    self.get_logger().error("Error: No se recibió el tamaño de la imagen del servidor.")
+                # **Recibir y procesar los nombres de HAZMAT**
+                name_size_data = s.recv(4)
+                if not name_size_data:
+                    self.get_logger().error("Error: No se recibió el tamaño de los nombres de HAZMAT.")
                     return
 
+                name_size = int.from_bytes(name_size_data, byteorder='little')
+                hazmat_names_data = s.recv(name_size).decode('utf-8')
+
+                # Publicar el mensaje de detección
+                msg = String()
+                msg.data = hazmat_names_data
+                self.hazmat_publisher.publish(msg)
+                
+                if hazmat_names_data == "No detections":
+                    self.get_logger().info("No se detectaron HAZMAT en esta imagen.")
+                else:
+                    self.get_logger().info(f'Nombres de HAZMAT detectados: {hazmat_names_data}')
+
+                # Recibir y decodificar la imagen procesada
+                img_size_data = s.recv(4)
                 img_size = int.from_bytes(img_size_data, byteorder='little')
                 b_json = bytearray()
-
-                # Recibir la imagen completa
                 while len(b_json) < img_size:
                     data = s.recv(4096)
                     if not data:
@@ -74,21 +91,21 @@ class CamaraClient(Node):
             self.get_logger().error(f"Error en la conexión con el servidor: {e}")
             return
 
-        if not b_json:
-            self.get_logger().error("Error: Se recibió un búfer vacío del servidor.")
-            return
-
+        # Recibir y decodificar la imagen procesada
         img_results = np.frombuffer(b_json, dtype=np.uint8)
         img_decoded = cv.imdecode(img_results, cv.IMREAD_COLOR)
         if img_decoded is None:
             self.get_logger().error("Error: No se pudo decodificar la imagen.")
             return
 
-        # Mostrar la imagen procesada
-        cv.namedWindow("Resultado", cv.WINDOW_NORMAL)  # Permitir redimensionamiento
-        cv.resizeWindow("Resultado", 800, 600)  # Ajustar el tamaño de la ventana
-        cv.imshow("Resultado", img_decoded)
-        cv.waitKey(1)  # Esperar 1 ms
+        # Convertir de BGR a RGB antes de publicarla
+        img_decoded_rgb = cv.cvtColor(img_decoded, cv.COLOR_BGR2RGB)
+
+        # Publicar la imagen procesada en el tópico `/hazmat_img`
+        img_msg = self.bridge.cv2_to_imgmsg(img_decoded_rgb, encoding="rgb8")
+        self.image_publisher.publish(img_msg)
+
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -104,5 +121,8 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+
+
+
 
 
