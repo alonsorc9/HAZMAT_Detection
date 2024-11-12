@@ -7,7 +7,7 @@ import sys
 import zlib
 
 sys.path.append('/home/alonso/git/DeepHAZMAT')
-from deep_hazmat.deep_hazmat import DeepHAZMAT
+from deep_hazmat import DeepHAZMAT
 
 class CamaraServer:
     def __init__(self):
